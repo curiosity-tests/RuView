@@ -6,12 +6,35 @@ on:
   pull_request:
     branches: [ main, develop ]
   workflow_dispatch:
+    inputs:
+      leg:
+        description: "baseline (uninstrumented) or instrumented (under chalk/curiosity)"
+        type: choice
+        options: [instrumented, baseline]
+        default: instrumented
+      profile:
+        description: "CrashOverride chalk profile"
+        type: string
+        default: curiosity-tests-racecar
+      racecar_run:
+        description: "racecar correlation token, echoed into the run name"
+        type: string
+        default: ""
 
 env:
+  # The one variable that separates the arms: on baseline, action-checkout
+  # skips its Set up Chalk step entirely.
+  CHALK_ON: ${{ github.event_name == 'workflow_dispatch' && inputs.leg != 'baseline' }}
   PYTHON_VERSION: '3.11'
   NODE_VERSION: '20' # ADR-265: all Node packages in this repo declare engines >= 20
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
+
+permissions:
+  contents: read
+  id-token: write
+
+run-name: "Continuous Integration ${{ inputs.leg || 'push' }} ${{ inputs.racecar_run }}"
 
 jobs:
   # Code Quality and Security Checks
@@ -27,10 +50,19 @@ jobs:
     steps:
     - name: Checkout code
       continue-on-error: true
-      uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      uses: crashappsec/action-checkout@main
       with:
+        chalk: ${{ env.CHALK_ON }}
+        profile: ${{ inputs.profile || 'curiosity-tests-racecar' }}
+        observables_continue_on_error: false
+        lfs: false
         submodules: recursive
         fetch-depth: 0
+    - name: Assert instrumentation is live
+      if: env.CHALK_ON == 'true'
+      run: |
+        test -n "${CURIOSITY_ROOT:-}" || { echo "::error::CURIOSITY_ROOT unset - observables never installed"; exit 1; }
+        test -S "${CURIOSITY_SOCKET_NAME:?socket name unset}" || { echo "::error::co-hostd socket absent"; exit 1; }
 
     - name: Set up Python
       continue-on-error: true
@@ -82,8 +114,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout code
-      uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      uses: crashappsec/action-checkout@main
       with:
+        chalk: ${{ env.CHALK_ON }}
+        profile: ${{ inputs.profile || 'curiosity-tests-racecar' }}
+        observables_continue_on_error: false
+        lfs: false
         submodules: recursive
       # ADR-262 P1: `wifi-densepose-rufield` path-deps the `vendor/rufield`
       # submodule. Without a recursive checkout the workspace build fails to
@@ -94,6 +130,12 @@ jobs:
     # workspace test fails at the build step before any test runs (every recent
     # main CI run has been red on this for exactly this reason). Install the
     # standard Tauri-on-Ubuntu set.
+    - name: Assert instrumentation is live
+      if: env.CHALK_ON == 'true'
+      run: |
+        test -n "${CURIOSITY_ROOT:-}" || { echo "::error::CURIOSITY_ROOT unset - observables never installed"; exit 1; }
+        test -S "${CURIOSITY_SOCKET_NAME:?socket name unset}" || { echo "::error::co-hostd socket absent"; exit 1; }
+
     - name: Install Tauri / GTK / serial system dev libraries
       run: |
         sudo apt-get update
@@ -196,7 +238,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout code
-      uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      uses: crashappsec/action-checkout@main
+      with:
+        chalk: ${{ env.CHALK_ON }}
+        profile: ${{ inputs.profile || 'curiosity-tests-racecar' }}
+        observables_continue_on_error: false
+        lfs: false
+    - name: Assert instrumentation is live
+      if: env.CHALK_ON == 'true'
+      run: |
+        test -n "${CURIOSITY_ROOT:-}" || { echo "::error::CURIOSITY_ROOT unset - observables never installed"; exit 1; }
+        test -S "${CURIOSITY_SOCKET_NAME:?socket name unset}" || { echo "::error::co-hostd socket absent"; exit 1; }
 
     - name: Set up Node
       uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
@@ -247,9 +299,18 @@ jobs:
     steps:
     - name: Checkout code
       continue-on-error: true
-      uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      uses: crashappsec/action-checkout@main
       with:
+        chalk: ${{ env.CHALK_ON }}
+        profile: ${{ inputs.profile || 'curiosity-tests-racecar' }}
+        observables_continue_on_error: false
+        lfs: false
         submodules: recursive
+    - name: Assert instrumentation is live
+      if: env.CHALK_ON == 'true'
+      run: |
+        test -n "${CURIOSITY_ROOT:-}" || { echo "::error::CURIOSITY_ROOT unset - observables never installed"; exit 1; }
+        test -S "${CURIOSITY_SOCKET_NAME:?socket name unset}" || { echo "::error::co-hostd socket absent"; exit 1; }
 
     - name: Set up Python ${{ matrix.python-version }}
       continue-on-error: true
@@ -318,9 +379,18 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
     - name: Checkout code
-      uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      uses: crashappsec/action-checkout@main
       with:
+        chalk: ${{ env.CHALK_ON }}
+        profile: ${{ inputs.profile || 'curiosity-tests-racecar' }}
+        observables_continue_on_error: false
+        lfs: false
         submodules: recursive
+    - name: Assert instrumentation is live
+      if: env.CHALK_ON == 'true'
+      run: |
+        test -n "${CURIOSITY_ROOT:-}" || { echo "::error::CURIOSITY_ROOT unset - observables never installed"; exit 1; }
+        test -S "${CURIOSITY_SOCKET_NAME:?socket name unset}" || { echo "::error::co-hostd socket absent"; exit 1; }
 
     - name: Set up Python
       uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
@@ -388,9 +458,18 @@ jobs:
     steps:
     - name: Checkout code
       continue-on-error: true
-      uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      uses: crashappsec/action-checkout@main
       with:
+        chalk: ${{ env.CHALK_ON }}
+        profile: ${{ inputs.profile || 'curiosity-tests-racecar' }}
+        observables_continue_on_error: false
+        lfs: false
         submodules: recursive
+    - name: Assert instrumentation is live
+      if: env.CHALK_ON == 'true'
+      run: |
+        test -n "${CURIOSITY_ROOT:-}" || { echo "::error::CURIOSITY_ROOT unset - observables never installed"; exit 1; }
+        test -S "${CURIOSITY_SOCKET_NAME:?socket name unset}" || { echo "::error::co-hostd socket absent"; exit 1; }
 
     - name: Set up Docker Buildx
       continue-on-error: true
@@ -460,11 +539,21 @@ jobs:
     if: github.ref == 'refs/heads/main'
     permissions:
       contents: write   # gh-pages deploy needs write (GITHUB_TOKEN is read-only by default -> 403)
+      id-token: write
     steps:
     - name: Checkout code
-      uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      uses: crashappsec/action-checkout@main
       with:
+        chalk: ${{ env.CHALK_ON }}
+        profile: ${{ inputs.profile || 'curiosity-tests-racecar' }}
+        observables_continue_on_error: false
+        lfs: false
         submodules: recursive
+    - name: Assert instrumentation is live
+      if: env.CHALK_ON == 'true'
+      run: |
+        test -n "${CURIOSITY_ROOT:-}" || { echo "::error::CURIOSITY_ROOT unset - observables never installed"; exit 1; }
+        test -S "${CURIOSITY_SOCKET_NAME:?socket name unset}" || { echo "::error::co-hostd socket absent"; exit 1; }
 
     - name: Set up Python
       uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
@@ -505,6 +594,7 @@ jobs:
     if: always()
     permissions:
       contents: write   # required by softprops/action-gh-release
+      id-token: write
     # GitHub Actions does not allow `secrets.X` directly in step-level `if:`
     # expressions — only `env.X`. Promote the secret to env at job scope so
     # the gating expression below is parseable.
