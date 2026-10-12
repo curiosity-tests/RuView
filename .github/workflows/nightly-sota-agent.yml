@@ -1,8 +1,6 @@
 name: Nightly SOTA research agent
 
 on:
-  schedule:
-    - cron: '17 3 * * *'
   workflow_dispatch:
     inputs:
       mode:
